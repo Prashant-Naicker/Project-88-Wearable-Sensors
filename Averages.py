@@ -9,6 +9,7 @@ from collections import deque
 
 x = np.arange(200)
 y = deque()
+yO = deque()
 
 runningTotal = 0
 runningAv = 0
@@ -24,35 +25,46 @@ class MyDelegate(DefaultDelegate):
         global runningAv
         global runningTotal
         
-        
-        
-        tempX = ((ord(data[1])<<8) + ord(data[0])) / 100
+        if cHandle == 78:
+            tempX = ((ord(data[1])<<8) + ord(data[0])) / 100
 
-        if tempX > 327.67:
-            tempX = (655.35 - tempX)
+            if tempX > 327.67:
+                tempX = - (655.35 - tempX)
 
-        tempX -= 9.81
-        
-        if len(y) < 600:
-            y.appendleft(tempX)
-        else:
-            y.pop()
-            y.appendleft(tempX)
+            tempX -= 9.81
             
-        runningTotal += abs(tempX)
-        sampleCount += 1
-        
-        if sampleCount > 200:
-            runningAv = runningTotal / sampleCount
-            runningTotal = 0
-            sampleCount = 0
-
-            if runningAv > 2.0:
-                print ("Walking")
-            elif runningAv > 0.6:
-                print ("Shuffling")
+            if len(y) < 600:
+                y.appendleft(tempX)
             else:
-                print ("Idle")
+                y.pop()
+                y.appendleft(tempX)
+                
+            #runningTotal += abs(tempX)
+            #sampleCount += 1
+            
+            #if sampleCount > 200:
+                #runningAv = runningTotal / sampleCount
+                #runningTotal = 0
+                #sampleCount = 0
+
+                #if runningAv > 2.0:
+                    #print ("Walking")
+                #elif runningAv > 0.6:
+                    #print ("Shuffling")
+                #else:
+                    #print ("Idle")
+        elif cHandle == 81:
+            tempOZ = ((ord(data[5])<<8) + ord(data[4])) / 100
+
+            if tempOZ > 327.67:
+                tempOZ = - (655.35 - tempOZ)
+
+            if len(yO) < 600:
+                yO.appendleft(tempOZ)
+            else:
+                yO.pop()
+                yO.appendleft(tempOZ)
+
             
             
         
@@ -71,6 +83,7 @@ class ListenerThread(threading.Thread):
         connection = connections[self.connection_index]
         connection.setDelegate(MyDelegate(self.connection_index))
         connection.writeCharacteristic(79, "\x01\x00")
+        connection.writeCharacteristic(82, "\x01\x00")
         
         while True:
             if connection.waitForNotifications(1):
