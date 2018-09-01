@@ -2,7 +2,7 @@ import socket
 import sys
 
 def Main():
-        host = '127.0.0.1'
+        host = '165.227.60.238'
         port = 8081
 
         s = socket.socket()
@@ -11,13 +11,10 @@ def Main():
         message = input("->")
         while message != 'q':
             messageBytes = message.encode('utf-8')
-            print(messageBytes)
             dataLength = len(messageBytes)
-            print(dataLength)
-            dataLengthRaw = bin(dataLength)
+            dataLengthRaw = bytearray(dataLength.to_bytes(2, sys.byteorder))
 
-            print(dataLengthRaw)
-            s.send(dataLengthRaw.encode('utf-8'))
+            s.send(dataLengthRaw)
             s.send(messageBytes)
             message = input("->")
         s.close()
