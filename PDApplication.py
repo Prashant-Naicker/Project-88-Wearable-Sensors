@@ -6,7 +6,9 @@ from collections import deque
 from datetime import datetime
 import pyqtgraph as pg
 import numpy as np
+import socket
 import sys
+import struct
 import threading
 import time
 
@@ -19,11 +21,14 @@ scanner = Scanner(0)
 
 AccX = deque([0.0]*200)
 AngVZ = deque([0.0]*200)
+AccXPlot = deque([0.0]*200)
+AngVZPlot = deque([0.0]*200)
 
 sampleCount = 0
 AccXDC = 0
 AngVZDC = 0
 FEnergy = 0
+statusCode = '0'
 status = 'Idle'
 
 
@@ -108,7 +113,7 @@ class LiveGraphs(object):
         self.win = pg.GraphicsWindow(title='P4P')
         self.win.setWindowTitle('P4P')
         self.pastStatus = 'Idle'
-        self.win.addLabel('Status: ' + status,0,1)
+        self.win.addLabel('Status: ' + status,0,1, size='22pt', color='fff400')
         self.win.resize(1000,600)
 
         AccX_xlabels = [(0, '0'), (50, '50'), (100, '100'),(150, '150'), (200, '200')]
@@ -131,14 +136,14 @@ class LiveGraphs(object):
         Fenergy_yaxis.setLabel('Acc X (m/s2)')
 
         self.accelerationX = self.win.addPlot(
-            title='ACCELERATION X', row=1, col=1, axisItems={'bottom': AccX_xaxis, 'left': AccX_yaxis},
+            row=1, col=1, axisItems={'bottom': AccX_xaxis, 'left': AccX_yaxis},
         )
         self.angularVelocityZ = self.win.addPlot(
-            title='ANGULAR VELOCITY Z', row=2, col=1, axisItems={'bottom': AngVZ_xaxis, 'left': AngVZ_yaxis},
+            row=2, col=1, axisItems={'bottom': AngVZ_xaxis, 'left': AngVZ_yaxis},
         )
 
         self.spectrum = self.win.addPlot(
-            title='SPECTRUM ACC X', row=3, col=1, axisItems={'bottom': Fenergy_xaxis, 'left': Fenergy_yaxis},
+            row=3, col=1, axisItems={'bottom': Fenergy_xaxis, 'left': Fenergy_yaxis},
         )
 
         #Waveform and spectrum x points.
@@ -160,17 +165,30 @@ class LiveGraphs(object):
                 self.accelerationX.setXRange(0, self.windowLength, padding=0.005)
             if name == 'angularVelocityZ':
                 self.traces[name] = self.angularVelocityZ.plot(pen='m', width=3)
-                self.angularVelocityZ.setYRange(-200, 200, padding=0)
+                self.angularVelocityZ.setYRange(-250, 200, padding=0)
                 self.angularVelocityZ.setXRange(0, self.windowLength, padding=0.005)
             if name == 'spectrum':
                 self.traces[name] = self.spectrum.plot(pen='g', width=3)
-                self.spectrum.setYRange(0, 2.5, padding=0)
+                self.spectrum.setYRange(0, 2, padding=0)
                 self.spectrum.setXRange(0, 20, padding=0.005)
 
     def update(self):
         global AccX
         global AngVZ
-
+        global AccXPlot
+        global AngVZPlot
+        
+        if len(AccX) > 0:
+            AccXPlot.pop()
+            AccXPlot.appendleft(AccX[0])
+        else:
+            print("===============No data in buffer================================")
+        if len(AngVZ) > 0:
+            AngVZPlot.pop()
+            AngVZPlot.appendleft(AngVZ[0])
+        else:
+            print("===============No data in buffer================================")
+    
         self.set_plotdata(name='accelerationX', data_x=self.x, data_y=AccX,)
         self.set_plotdata(name='angularVelocityZ', data_x=self.x, data_y=AngVZ,)
 
@@ -183,15 +201,14 @@ class LiveGraphs(object):
 
         #Only update the label if the status has changed.
         if self.pastStatus != status:
-            self.win.removeItem(self.win.getItem(0,1))
-            self.win.addLabel('Status: ' + status,0,1)
+            self.win.getItem(0,1).setText('Status: ' + status)
             self.pastStatus = status
 
     def animation(self):
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update)
         #Setting the refresh rate.
-        timer.start(20)
+        timer.start(30)
         self.start()
 
 
@@ -199,6 +216,7 @@ class LiveGraphs(object):
 class RecognitionThread(threading.Thread):
     def run(self):
         global status
+        global statusCode
 
         while True:
             currentTime = str(datetime.now())
@@ -206,24 +224,39 @@ class RecognitionThread(threading.Thread):
             #Decision tree classification.
             if AngVZDC <= 40.6:
                 if AngVZDC <= 2.605:
+                    statusCode = '3'
                     status = 'Idle'
                     print (currentTime + "  -  Idle")
                 else:
                     if AngVZDC <= 13.455:
+                        statusCode = '2'
                         status = 'Up Down'
                         print (currentTime + "  -  UpDown")
                     else:
+                        statusCode = '1'
                         status = 'Shuffling'
                         print (currentTime + "  -  Shuffling")
             else:
+                statusCode = '0'
                 status = 'Walking'
                 print (currentTime + "  -  Walking")
 
-            time.sleep(3)
+            messageBytes = str(statusCode).decode('utf-8')
+            dataLength = len(messageBytes)
+            dataLengthRaw = bytearray(struct.pack("<H", dataLength))
+            
+            s.send(dataLengthRaw)
+            s.send(messageBytes)
+
+            time.sleep(2)
 
 
 
 if __name__ == '__main__':
+    host = '165.227.60.238'
+    port = 8081
+    s = socket.socket()
+    s.connect((host, port))
     print('Connected: ' + str(len(connection_threads)))
     print('Scanning...')
 
@@ -245,3 +278,11 @@ if __name__ == '__main__':
 
     dataStream = LiveGraphs()
     dataStream.animation()
+
+    try:
+        while True:
+            continue
+    except KeyboardInterrupt:
+        pass
+
+    s.close()

@@ -1,5 +1,6 @@
 import socket
 import sys
+import struct
 
 def Main():
         host = '165.227.60.238'
@@ -10,10 +11,10 @@ def Main():
 
         message = input("->")
         while message != 'q':
-            messageBytes = message.encode('utf-8')
+            messageBytes = str(message).decode('utf-8')
             dataLength = len(messageBytes)
-            dataLengthRaw = bytearray(dataLength.to_bytes(2, sys.byteorder))
-
+            dataLengthRaw = bytearray(struct.pack("<H", dataLength))
+            
             s.send(dataLengthRaw)
             s.send(messageBytes)
             message = input("->")
